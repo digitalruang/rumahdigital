@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rumah Digital Smart Smepsa</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563EB',
+                        secondary: '#14B8A6',
+                        accent: '#FACC15',
+                        dark: '#1E293B',
+                        light: '#F8FAFC'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- KaTeX for Math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F1F5F9; color: #1E293B; }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- Firebase Modular Scripts -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase Configuration fallback for environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'smepsa-app-default';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyDemoConfigKeyForSmepsaApp2026",
+                authDomain: "smepsa-digital.firebaseapp.com",
+                projectId: "smepsa-digital",
+                storageBucket: "smepsa-digital.appspot.com",
+                messagingSenderId: "1234567890",
+                appId: "1:1234567890:web:abcdef123456"
+            };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.db = db;
+        window.auth = auth;
+        window.appId = appId;
+        window.signInAnonymously = signInAnonymously;
+        window.signInWithCustomToken = signInWithCustomToken;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.doc = doc;
+        window.setDoc = setDoc;
+        window.getDoc = getDoc;
+        window.collection = collection;
+        window.getDocs = getDocs;
+        window.addDoc = addDoc;
+        window.onSnapshot = onSnapshot;
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, createContext, useContext, useRef } = React;
+
+        // --- HELPER COMPONENT FOR LATEX MATH ---
+        const MathText = ({ text }) => {
+            const containerRef = useRef(null);
+
+            useEffect(() => {
+                if (!containerRef.current) return;
+                let processedText = text || '';
+                
+                // Replace inline math $...$
+                processedText = processedText.replace(/\$([^\$]+)\$/g, (match, formula) => {
+                    try {
+                        return katex.renderToString(formula, { displayMode: false, throwOnError: false });
+                    } catch (e) {
+                        return match;
+                    }
+                });
+
+                // Replace display math $$...$$
+                processedText = processedText.replace(/\$\$([^\$]+)\$\$/g, (match, formula) => {
+                    try {
+                        return katex.renderToString(formula, { displayMode: true, throwOnError: false });
+                    } catch (e) {
+                        return match;
+                    }
+                });
+
+                containerRef.current.innerHTML = processedText;
+            }, [text]);
+
+            return <span ref={containerRef} className="leading-relaxed whitespace-pre-line inline-block w-full" />;
+        };
+
+        // --- CONSTANTS ---
+        const GRADES = ['VII', 'VIII', 'IX'];
+        const SECTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+        const CLASSES = GRADES.flatMap(g => SECTIONS.map(s => `${g} ${s}`));
+        
+        const TEACHER_CLASS_OPTIONS = [
+            'Semua Kelas VII',
+            'Semua Kelas VIII',
+            'Semua Kelas IX',
+            ...CLASSES
+        ];
+
+        const SUBJECTS = [
+            { id: '1', name: 'Pendidikan Agama dan Budi Pekerti', icon: 'fa-book-quran', color: 'bg-emerald-500' },
+            { id: '2', name: 'Pendidikan Pancasila', icon: 'fa-star', color: 'bg-red-500' },
+            { id: '3', name: 'Bahasa Indonesia', icon: 'fa-book-open', color: 'bg-blue-500' },
+            { id: '4', name: 'Matematika', icon: 'fa-calculator', color: 'bg-amber-500' },
+            { id: '5', name: 'Ilmu Pengetahuan Alam (IPA)', icon: 'fa-flask', color: 'bg-teal-500' },
+            { id: '6', name: 'Ilmu Pengetahuan Sosial (IPS)', icon: 'fa-earth-asia', color: 'bg-orange-500' },
+            { id: '7', name: 'Bahasa Inggris', icon: 'fa-language', color: 'bg-indigo-500' },
+            { id: '8', name: 'Informatika', icon: 'fa-laptop-code', color: 'bg-slate-700' },
+            { id: '9', name: 'Seni Budaya', icon: 'fa-palette', color: 'bg-pink-500' },
+            { id: '10', name: 'PJOK', icon: 'fa-volleyball', color: 'bg-cyan-500' },
+            { id: '11', name: 'Muatan Lokal / Bahasa Daerah', icon: 'fa-landmark', color: 'bg-amber-700' },
+            { id: '12', name: 'KKA (Koding & Kecerdasan Artifisial)', icon: 'fa-robot', color: 'bg-violet-600' }
+        ];
+
+        const INITIAL_ARTICLES = [
+            { 
+                id: 'a1', 
+                title: 'Pentingnya Menjaga Kebersihan Lingkungan Sekolah', 
+                category: 'Lingkungan',
+                date: '2026-10-20',
+                author: 'Tim Adiwiyata',
+                summary: 'Kebersihan sekolah adalah tanggung jawab bersama untuk menciptakan suasana belajar yang sehat, aman, dan kondusif.', 
+                content: 'Kebersihan lingkungan sekolah merupakan salah satu faktor penting dalam menciptakan suasana belajar yang nyaman dan kondusif.\n\nLingkungan yang bersih tidak hanya mencegah penularan berbagai penyakit, tetapi juga meningkatkan konsentrasi dan semangat belajar para siswa. Langkah sederhana seperti memilah sampah organik dan anorganik serta menjaga kerapihan ruang kelas dapat memberikan dampak besar bagi seluruh warga sekolah.' 
+            },
+            { 
+                id: 'a2', 
+                title: 'Membangun Minat Baca di Era Digital', 
+                category: 'Literasi',
+                date: '2026-10-18',
+                author: 'Perpustakaan Smepsa',
+                summary: 'Membaca buku di era serba cepat membuka wawasan kritis dan meningkatkan daya analisis siswa.', 
+                content: 'Di era pesatnya perkembangan teknologi informasi, kebiasaan membaca tetap menjadi kunci utama kesuksesan akademik dan personal.\n\nDengan memanfaatkan gawai secara bijak untuk membaca buku digital dan artikel bermutu, kita dapat memperluas wawasan, meningkatkan kosa kata, serta memperkuat pemahaman bernalar tinggi (HOTS).' 
+            }
+        ];
+
+        const NUMERACY_QUIZZES = [
+            {
+                id: 'num-1',
+                title: 'Logika & Aritmatika Sosial',
+                desc: 'Latihan perhitungan persentase diskon, untung, rugi, dan porsi perbandingan.',
+                questions: [
+                    {
+                        question: 'Sebuah toko sepatu memberikan diskon $20\\%$ untuk semua barang. Jika harga awal sepatu adalah Rp 250.000, berapa harga sepatu setelah diskon?',
+                        options: ['Rp 180.000', 'Rp 200.000', 'Rp 220.000', 'Rp 230.000'],
+                        correct: 1,
+                        explanation: 'Diskon = $20\\% \\times 250.000 = 50.000$.\nHarga Bayar = $250.000 - 50.000 = 200.000$.'
+                    },
+                    {
+                        question: 'Rasio jumlah siswa laki-laki dan perempuan di kelas VIII A adalah $2 : 3$. Jika total siswa adalah 30 orang, berapa jumlah siswa perempuan?',
+                        options: ['12 orang', '15 orang', '18 orang', '20 orang'],
+                        correct: 2,
+                        explanation: 'Jumlah bagian = $2 + 3 = 5$.\nSiswa perempuan = $\\frac{3}{5} \\times 30 = 18$ orang.'
+                    }
+                ]
+            },
+            {
+                id: 'num-2',
+                title: 'Geometri & Pengukuran Praktis',
+                desc: 'Menghitung keliling, luas, dan kapasitas volume dalam situasi nyata.',
+                questions: [
+                    {
+                        question: 'Sebuah kolam renang berbentuk balok dengan panjang $10\\text{ m}$, lebar $5\\text{ m}$, dan kedalaman $2\\text{ m}$. Berapa volume air maksimum kolam tersebut dalam liter? ($1\\text{ m}^3 = 1.000\\text{ liter}$)',
+                        options: ['50.000 liter', '100.000 liter', '150.000 liter', '200.000 liter'],
+                        correct: 1,
+                        explanation: 'Volume balok = $10 \\times 5 \\times 2 = 100\\text{ m}^3$.\nDalam liter = $100 \\times 1.000 = 100.000\\text{ liter}$.'
+                    }
+                ]
+            }
+        ];
+
+        // --- TRY OUT TKA DATA ---
+        const TRYOUT_TKA_DATA = {
+            matematika: [
+                {
+                    id: 'tka-m-pdf-1',
+                    type: 'single',
+                    question: 'Mesin tetas telur digunakan untuk pengeraman telur unggas selama 18 hari. Pengamatan usia telur saat ini:\n• 2 hari: 20 telur\n• 4 hari: 35 telur\n• 6 hari: 30 telur\n• 8 hari: 15 telur\n\nJika satu telur diambil secara acak, berapakah peluang telur tersebut akan menetas dalam 10 hari ke depan?',
+                    options: ['3 / 20', '1 / 15', '3 / 10', '1 / 18'],
+                    correctIndex: 2,
+                    explanation: 'Total telur = $20 + 35 + 30 + 15 = 100$ telur.\nTelur usia 8 hari akan menetas dalam 10 hari ke depan ($8 + 10 = 18$). Banyak telur usia 8 hari = 30. Peluang = $30/100 = 3/10$.'
+                },
+                {
+                    id: 'tka-m-pdf-2',
+                    type: 'multiple',
+                    question: 'Guru mengambil 3 kertas soal berkode B dari dalam kotak. Setelah pengambilan, tersisa 28 lembar kertas di dalam kotak dengan jumlah kertas B lebih banyak dari C. Peluang terambilnya kertas berkode C secara acak adalah $2/7$.\n\nManakah yang MUNGKIN merupakan jumlah kertas berkode B mula-mula? (Pilih lebih dari satu)',
+                    options: ['10 lembar', '11 lembar', '12 lembar', '14 lembar'],
+                    correctIndices: [1, 2],
+                    explanation: 'Jumlah kertas sisa = 28 lembar.\n$P(C) = 2/7 \\Rightarrow$ Banyak kertas C = $\\frac{2}{7} \\times 28 = 8$ lembar.'
+                }
+            ],
+            bahasa_indonesia: [
+                {
+                    id: 'tka-b-pdf-1',
+                    type: 'single',
+                    question: 'Erupsi Anak Krakatau Tahun 2026\n\nGunung Anak Krakatau berada di kawasan Selat Sunda, di antara Pulau Jawa dan Pulau Sumatra. Pada tahun 2026, aktivitas vulkanik Anak Krakatau kembali meningkat. Kepulan abu dan gas terlihat keluar dari kawah dan membumbung ke udara. Pada awal September, aktivitas erupsi semakin kuat. Semburan material vulkanik tampak dari kawasan puncak gunung, disertai suara gemuruh dan lontaran lava. Abu vulkanik kemudian terbawa angin ke berbagai arah. Kondisi tersebut membuat kawasan di sekitar gunung tampak tertutup kabut abu dan mengurangi jarak pandang. Sehingga membuat aktivitas sekitar Gunung Anak Krakatau sempat terganggu.\n\nBerdasarkan kosakata yang digunakan dalam teks tersebut, lokasi yang menjadi pusat aktivitas erupsi Anak Krakatau adalah...',
+                    options: [
+                        'kawasan Banten',
+                        'kawasan Lampung',
+                        'kawasan Selat Sunda',
+                        'kawasan puncak Anak Krakatau'
+                    ],
+                    correctIndex: 3,
+                    explanation: 'Pusat aktivitas erupsi dijelaskan secara spesifik: "Semburan material vulkanik tampak dari kawasan puncak gunung..."'
+                }
+            ]
+        };
+
+        // --- FIREBASE API SERVICE LAYER ---
+        const DEFAULT_MATERIALS = [
+            { id: 'm1', subjectId: '4', classId: 'VIII C', title: 'Sistem Persamaan Linear Dua Variabel (SPLDV)', type: 'materi', content: 'SPLDV adalah sistem yang terdiri dari dua persamaan linear dengan dua variabel.\nContoh bentuk umum:\n$ax + by = c$\n$dx + ey = f$\nMetode penyelesaian meliputi: Eleminasi, Substitusi, dan Campuran.' },
+            { id: 'm2', subjectId: '4', classId: 'VII A', title: 'Operasi Hitung Bilangan Bulat', type: 'video', content: 'https://www.youtube.com/embed/dQw4w9WgXcQ' },
+            { id: 'm3', subjectId: '3', classId: 'VIII C', title: 'Struktur dan Kaidah Teks Eksposisi', type: 'materi', content: 'Teks eksposisi bertujuan menyajikan argumen secara ilmiah.\nStruktur:\n1. Tesis (Pernyataan Pendapat)\n2. Argumen\n3. Penegasan Ulang' },
+            { 
+                id: 'm4', 
+                subjectId: '12', 
+                classId: 'VII A', 
+                title: 'BAB 1: Berpikir Komputasional (Computational Thinking)', 
+                type: 'materi', 
+                content: 'Berpikir Komputasional adalah metode penyelesaian masalah dengan menerapkan teknik ilmu komputer.' 
+            },
+            {
+                id: 'm6',
+                subjectId: '8',
+                classId: 'VIII C',
+                title: 'Menghitung Data Tertentu Menggunakan Excel',
+                type: 'video',
+                content: 'https://www.youtube.com/embed/wL0lAy7pAF8',
+                description: 'Tutorial penggunaan formula COUNTIF dan COUNTIFS di Microsoft Excel untuk menganalisis data.'
+            },
+            {
+                id: 'm7',
+                subjectId: '8',
+                classId: 'VIII C',
+                title: 'Membuat Laporan Gaji Menggunakan Excel',
+                type: 'video',
+                content: 'https://www.youtube.com/embed/Wstx4Sts2VU',
+                description: 'Panduan praktis pembuatan laporan gaji pegawai lengkap menggunakan Microsoft Excel.'
+            }
+        ];
+
+        const dbService = {
+            async initAuth() {
+                if (!window.auth) return null;
+                return new Promise((resolve) => {
+                    window.onAuthStateChanged(window.auth, async (user) => {
+                        if (user) {
+                            resolve(user);
+                        } else {
+                            try {
+                                const customToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                                let cred;
+                                if (customToken) {
+                                    cred = await window.signInWithCustomToken(window.auth, customToken);
+                                } else {
+                                    cred = await window.signInAnonymously(window.auth);
+                                }
+                                resolve(cred.user);
+                            } catch (e) {
+                                console.error("Auth init error:", e);
+                                resolve(null);
+                            }
+                        }
+                    });
+                });
+            },
+
+            async loginUser(role, identifier, password) {
+                await this.initAuth();
+                const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const snap = await window.getDocs(usersRef);
+                let found = null;
+                snap.forEach(d => {
+                    const data = d.data();
+                    if (data.role === role && data.password === password) {
+                        if (role === 'siswa' && data.fullName?.toLowerCase() === identifier.fullName?.toLowerCase() && data.classId === identifier.classId) {
+                            found = { id: d.id, ...data };
+                        } else if (role === 'guru' && data.nip === identifier.nip) {
+                            found = { id: d.id, ...data };
+                        }
+                    }
+                });
+
+                if (!found) {
+                    if (role === 'siswa' && identifier.fullName === 'Budi Santoso') {
+                        found = { id: 's1', fullName: 'Budi Santoso', classId: 'VIII C', absensi: '05', role: 'siswa', password: 'password123', badges: ['Pionir Literasi', 'Bintang TKA'] };
+                    } else if (role === 'guru' && identifier.nip === '197508121999032001') {
+                        found = { id: 't1', fullName: 'Dra. Siti Aminah', nip: '197508121999032001', subjectId: '8', role: 'guru', password: 'password123', isVerified: true };
+                    }
+                }
+
+                if (!found) {
+                    throw new Error(role === 'siswa' ? 'Nama, kelas, atau password tidak sesuai.' : 'NIP atau password tidak sesuai.');
+                }
+                return found;
+            },
+
+            async registerSiswa(data) {
+                await this.initAuth();
+                const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const snap = await window.getDocs(usersRef);
+                let exists = false;
+                snap.forEach(d => {
+                    const u = d.data();
+                    if (u.role === 'siswa' && u.fullName?.toLowerCase() === data.fullName?.toLowerCase() && u.classId === data.classId) {
+                        exists = true;
+                    }
+                });
+                if (exists) throw new Error('Siswa dengan nama dan kelas tersebut sudah terdaftar.');
+
+                const newUser = { role: 'siswa', badges: ['Siswa Baru Smepsa'], createdAt: new Date().toISOString(), ...data };
+                const docRef = await window.addDoc(usersRef, newUser);
+                return { id: docRef.id, ...newUser };
+            },
+
+            async registerGuru(data) {
+                await this.initAuth();
+                const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const snap = await window.getDocs(usersRef);
+                let exists = false;
+                snap.forEach(d => {
+                    const u = d.data();
+                    if (u.role === 'guru' && u.nip === data.nip) {
+                        exists = true;
+                    }
+                });
+                if (exists) throw new Error('Guru dengan NIP tersebut sudah terdaftar.');
+
+                const newUser = { role: 'guru', isVerified: true, createdAt: new Date().toISOString(), ...data };
+                const docRef = await window.addDoc(usersRef, newUser);
+                return { id: docRef.id, ...newUser };
+            },
+
+            async getMaterials(subjectId, requestingClassId) {
+                await this.initAuth();
+                const materialsRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'materials');
+                const snap = await window.getDocs(materialsRef);
+                const cloudMaterials = [];
+                snap.forEach(d => cloudMaterials.push({ id: d.id, ...d.data() }));
+
+                const allMaterials = [...DEFAULT_MATERIALS, ...cloudMaterials];
+                const studentGrade = requestingClassId ? requestingClassId.split(' ')[0] : null;
+
+                return allMaterials.filter(m => {
+                    if (m.subjectId !== subjectId) return false;
+                    if (!studentGrade) return true;
+                    if (m.classId === `Semua Kelas ${studentGrade}`) return true;
+                    return m.classId.split(' ')[0] === studentGrade || m.classId === requestingClassId;
+                });
+            },
+
+            async addMaterial(newMat) {
+                await this.initAuth();
+                const materialsRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'materials');
+                const payload = { ...newMat, createdAt: new Date().toISOString() };
+                const docRef = await window.addDoc(materialsRef, payload);
+                return { id: docRef.id, ...payload };
+            }
+        };
+
+        // --- CONTEXT ---
+        const AppStateContext = createContext();
+
+        // --- COMMON UI COMPONENTS ---
+        const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button', disabled = false }) => {
+            const baseStyle = "px-4 py-2.5 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base";
+            const variants = {
+                primary: "bg-primary text-white hover:bg-blue-700 hover:shadow-md active:scale-95",
+                secondary: "bg-secondary text-white hover:bg-teal-600 hover:shadow-md active:scale-95",
+                accent: "bg-accent text-dark hover:bg-yellow-500 hover:shadow-md active:scale-95",
+                outline: "border-2 border-primary text-primary hover:bg-blue-50 active:scale-95",
+                danger: "bg-red-500 text-white hover:bg-red-600 active:scale-95",
+                ghost: "bg-transparent text-gray-600 hover:bg-gray-100 shadow-none"
+            };
+            return (
+                <button type={type} onClick={onClick} disabled={disabled} className={`${baseStyle} ${variants[variant]} ${className}`}>
+                    {children}
+                </button>
+            );
+        };
+
+        const Input = ({ label, type = 'text', value, onChange, name, required = true, placeholder }) => {
+            const [showPassword, setShowPassword] = useState(false);
+            const isPasswordType = type === 'password';
+
+            return (
+                <div className="mb-4 text-left">
+                    <label className="block text-gray-700 text-sm font-bold mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
+                    <div className="relative">
+                        <input 
+                            name={name}
+                            type={isPasswordType ? (showPassword ? 'text' : 'password') : type} 
+                            value={value} 
+                            onChange={onChange} 
+                            required={required} 
+                            placeholder={placeholder}
+                            className={`shadow-sm appearance-none border border-gray-300 rounded-xl w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all ${isPasswordType ? 'pr-11' : ''}`}
+                        />
+                        {isPasswordType && (
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 focus:outline-none"
+                            >
+                                <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const Select = ({ label, value, onChange, name, options, required = true, placeholder }) => (
+            <div className="mb-4 text-left">
+                <label className="block text-gray-700 text-sm font-bold mb-1.5">{label} {required && <span className="text-red-500">*</span>}</label>
+                <select 
+                    name={name}
+                    value={value} onChange={onChange} required={required}
+                    className="shadow-sm border border-gray-300 rounded-xl w-full py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all bg-white"
+                >
+                    <option value="" disabled>{placeholder || 'Pilih...'}</option>
+                    {options.map(opt => (
+                        <option key={opt.value || opt} value={opt.value || opt}>{opt.label || opt}</option>
+                    ))}
+                </select>
+            </div>
+        );
+
+        const ConfirmModal = ({ isOpen, onConfirm, onCancel, title, message }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center p-4 animate-fade-in">
+                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm p-6 text-center">
+                        <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                            <i className="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3 className="text-xl font-bold mb-2 text-gray-800">{title}</h3>
+                        <p className="text-gray-600 mb-6 text-sm">{message}</p>
+                        <div className="flex gap-3 justify-center">
+                            <Button variant="ghost" onClick={onCancel}>Batal</Button>
+                            <Button variant="danger" onClick={onConfirm}>Ya, Keluar</Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const Toast = ({ message, type = 'error', onClose }) => {
+            if (!message) return null;
+            const colors = type === 'error' ? 'bg-red-500' : 'bg-emerald-600';
+            const icon = type === 'error' ? 'fa-circle-exclamation' : 'fa-check-circle';
+            return (
+                <div className="fixed top-4 right-4 z-50 animate-fade-in">
+                    <div className={`${colors} text-white px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 text-sm font-medium`}>
+                        <i className={`fas ${icon} text-lg`}></i>
+                        <span>{message}</span>
+                        <button onClick={onClose} className="ml-3 opacity-80 hover:opacity-100"><i className="fas fa-times"></i></button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- LAYOUT COMPONENTS ---
+        const Header = () => {
+            const { user, navigate, setLogoutModalOpen } = useContext(AppStateContext);
+            return (
+                <header className="bg-white shadow-sm sticky top-0 z-40">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate(user ? `dashboard_${user.role}` : 'landing')}>
+                            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-md">
+                                <i className="fas fa-school text-lg"></i>
+                            </div>
+                            <span className="font-extrabold text-lg sm:text-xl text-dark tracking-tight">Smart Smepsa</span>
+                        </div>
+                        
+                        {user && (
+                            <div className="flex items-center gap-3 sm:gap-4">
+                                <div className="text-right hidden sm:block">
+                                    <div className="text-sm font-bold text-gray-800">{user.fullName}</div>
+                                    <div className="text-xs text-gray-500">{user.role === 'siswa' ? `Kelas ${user.classId}` : 'Guru Mata Pelajaran'}</div>
+                                </div>
+                                <button onClick={() => navigate('profile')} className="w-10 h-10 rounded-full bg-primary/10 border-2 border-primary/20 shadow hover:border-primary transition-all flex items-center justify-center text-primary font-bold">
+                                    <i className="fas fa-user"></i>
+                                </button>
+                                <button onClick={() => setLogoutModalOpen(true)} className="text-gray-400 hover:text-red-500 transition-colors p-2" title="Keluar Aplikasi">
+                                    <i className="fas fa-arrow-right-from-bracket text-lg"></i>
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </header>
+            );
+        };
+
+        const PageNav = ({ title, showDashboardBtn = true }) => {
+            const { navigate, goBack, user } = useContext(AppStateContext);
+            return (
+                <div className="bg-white border-b border-gray-200 px-4 py-3 mb-6 flex items-center justify-between shadow-sm sticky top-16 z-30">
+                    <div className="flex items-center gap-3">
+                        <Button variant="ghost" onClick={goBack} className="!px-3 !py-1.5 text-xs sm:text-sm"><i className="fas fa-arrow-left"></i> Kembali</Button>
+                        <h2 className="font-bold text-gray-800 text-sm sm:text-base border-l pl-3 border-gray-300 truncate max-w-[200px] sm:max-w-none">{title}</h2>
+                    </div>
+                    {showDashboardBtn && user && (
+                        <Button variant="outline" onClick={() => navigate(`dashboard_${user.role}`)} className="!px-3 !py-1.5 text-xs sm:text-sm">
+                            <i className="fas fa-house"></i> Dashboard
+                        </Button>
+                    )}
+                </div>
+            );
+        };
+
+        // --- LANDING & AUTH SCREENS ---
+        const LandingPage = () => {
+            const { navigate } = useContext(AppStateContext);
+            return (
+                <div className="min-h-[calc(100vh-64px)] flex flex-col items-center justify-center text-center p-4 sm:p-6 relative overflow-hidden bg-slate-50">
+                    <div className="glass-panel p-8 md:p-12 rounded-3xl shadow-2xl max-w-3xl w-full z-10 relative my-8">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-primary to-blue-500 rounded-2xl flex items-center justify-center text-white text-3xl sm:text-4xl mx-auto mb-6 shadow-xl transform rotate-3">
+                            <i className="fas fa-graduation-cap -rotate-3"></i>
+                        </div>
+                        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-dark mb-4 leading-tight">
+                            SELAMAT DATANG DI <br/><span className="text-primary">RUMAH DIGITAL</span> SMART SMEPSA
+                        </h1>
+                        <p className="text-sm sm:text-lg text-gray-600 mb-8 italic">
+                            “Satu tempat untuk belajar, membaca, berhitung, berkreasi, dan meraih prestasi.”
+                        </p>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                            <Button onClick={() => navigate('login_siswa')} className="py-3.5"><i className="fas fa-user-graduate"></i> LOGIN SISWA</Button>
+                            <Button onClick={() => navigate('login_guru')} variant="secondary" className="py-3.5"><i className="fas fa-chalkboard-user"></i> LOGIN GURU</Button>
+                            <Button onClick={() => navigate('register_siswa')} variant="outline" className="py-3"><i className="fas fa-user-plus"></i> DAFTAR SISWA</Button>
+                            <Button onClick={() => navigate('register_guru')} variant="outline" className="py-3"><i className="fas fa-user-plus"></i> DAFTAR GURU</Button>
+                        </div>
+                        
+                        <div className="mt-4 pt-4 border-t border-gray-200 text-xs text-gray-500 flex items-center justify-center gap-2">
+                            <i className="fas fa-cloud text-blue-500"></i> Cloud Storage Connected
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const LoginSiswa = () => {
+            const { navigate, login, showToast } = useContext(AppStateContext);
+            const [form, setForm] = useState({ fullName: '', classId: '', password: '' });
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                try {
+                    await login('siswa', { fullName: form.fullName, classId: form.classId }, form.password);
+                } catch (err) {
+                    showToast(err.message);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden border border-gray-100">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-primary"></div>
+                        <Button variant="ghost" onClick={() => navigate('landing')} className="absolute top-4 left-2 !p-2"><i className="fas fa-arrow-left"></i></Button>
+                        <div className="text-center mb-6 mt-4">
+                            <h2 className="text-2xl font-bold text-gray-800">Login Siswa</h2>
+                            <p className="text-gray-500 text-sm mt-1">Masuk untuk mengakses materi & Try Out</p>
+                        </div>
+                        <form onSubmit={handleSubmit}>
+                            <Input label="Nama Lengkap" value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})} placeholder="Sesuai absen kelas" />
+                            <Select label="Kelas" value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} options={CLASSES} placeholder="Pilih Kelas..." />
+                            <Input label="Password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Masukkan password..." />
+                            <Button type="submit" className="w-full mt-6 py-3" disabled={loading}>
+                                {loading ? <i className="fas fa-spinner fa-spin"></i> : 'Masuk Aplikasi'}
+                            </Button>
+                        </form>
+                        <p className="text-center text-sm text-gray-500 mt-6">Belum punya akun? <button onClick={() => navigate('register_siswa')} className="text-primary font-bold hover:underline">Daftar di sini</button></p>
+                    </div>
+                </div>
+            );
+        };
+
+        const LoginGuru = () => {
+            const { navigate, login, showToast } = useContext(AppStateContext);
+            const [form, setForm] = useState({ nip: '', password: '' });
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                try {
+                    await login('guru', { nip: form.nip }, form.password);
+                } catch (err) {
+                    showToast(err.message);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md relative overflow-hidden border border-gray-100">
+                        <div className="absolute top-0 left-0 w-full h-2 bg-secondary"></div>
+                        <Button variant="ghost" onClick={() => navigate('landing')} className="absolute top-4 left-2 !p-2"><i className="fas fa-arrow-left"></i></Button>
+                        <div className="text-center mb-6 mt-4">
+                            <h2 className="text-2xl font-bold text-gray-800">Login Guru</h2>
+                            <p className="text-gray-500 text-sm mt-1">Masuk untuk mengelola materi & kelas</p>
+                        </div>
+                        <form onSubmit={handleSubmit}>
+                            <Input label="NIP / ID Guru" value={form.nip} onChange={e => setForm({...form, nip: e.target.value})} placeholder="Masukkan NIP..." />
+                            <Input label="Password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} placeholder="Masukkan password..." />
+                            <Button type="submit" variant="secondary" className="w-full mt-6 py-3" disabled={loading}>
+                                {loading ? <i className="fas fa-spinner fa-spin"></i> : 'Masuk Portal Guru'}
+                            </Button>
+                        </form>
+                        <p className="text-center text-sm text-gray-500 mt-6">Belum mendaftar? <button onClick={() => navigate('register_guru')} className="text-secondary font-bold hover:underline">Daftar Pengajar</button></p>
+                    </div>
+                </div>
+            );
+        };
+
+        const RegisterSiswa = () => {
+            const { navigate, showToast } = useContext(AppStateContext);
+            const [form, setForm] = useState({ fullName: '', classId: '', absensi: '', password: '', confirm: '' });
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (form.password.length < 8) return showToast("Password minimal 8 karakter!");
+                if (form.password !== form.confirm) return showToast("Konfirmasi password tidak cocok!");
+                
+                setLoading(true);
+                try {
+                    await dbService.registerSiswa({ fullName: form.fullName, classId: form.classId, absensi: form.absensi, password: form.password });
+                    showToast("Pendaftaran berhasil! Data telah tersimpan di cloud database.", "success");
+                    navigate('login_siswa');
+                } catch (err) {
+                    showToast(err.message);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4 py-8">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border-t-4 border-accent">
+                        <Button variant="ghost" onClick={() => navigate('landing')} className="mb-4 -ml-4"><i className="fas fa-arrow-left"></i> Kembali</Button>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-6">Pendaftaran Siswa Baru</h2>
+                        <form onSubmit={handleSubmit}>
+                            <Input label="Nama Lengkap" value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})} placeholder="Contoh: Budi Santoso" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <Select label="Kelas" value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} options={CLASSES} placeholder="Kelas..." />
+                                <Input label="No. Absen" type="number" value={form.absensi} onChange={e => setForm({...form, absensi: e.target.value})} placeholder="01" />
+                            </div>
+                            <Input label="Password" type="password" placeholder="Minimal 8 karakter" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+                            <Input label="Konfirmasi Password" type="password" placeholder="Ulangi password" value={form.confirm} onChange={e => setForm({...form, confirm: e.target.value})} />
+                            <Button type="submit" className="w-full py-3 mt-4" disabled={loading}>{loading ? 'Mendaftar...' : 'Daftar Sekarang'}</Button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const RegisterGuru = () => {
+            const { navigate, showToast } = useContext(AppStateContext);
+            const [form, setForm] = useState({ fullName: '', nip: '', subjectId: '', password: '', confirm: '' });
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (form.password.length < 8) return showToast("Password minimal 8 karakter!");
+                if (form.password !== form.confirm) return showToast("Konfirmasi password tidak cocok!");
+
+                setLoading(true);
+                try {
+                    await dbService.registerGuru({ fullName: form.fullName, nip: form.nip, subjectId: form.subjectId, password: form.password });
+                    showToast("Pendaftaran guru berhasil tersimpan di cloud! Silakan login.", "success");
+                    navigate('login_guru');
+                } catch (err) {
+                    showToast(err.message);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4 py-8">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border-t-4 border-secondary">
+                        <Button variant="ghost" onClick={() => navigate('landing')} className="mb-4 -ml-4"><i className="fas fa-arrow-left"></i> Kembali</Button>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-6">Pendaftaran Akun Guru</h2>
+                        <form onSubmit={handleSubmit}>
+                            <Input label="Nama Lengkap dengan Gelar" value={form.fullName} onChange={e => setForm({...form, fullName: e.target.value})} placeholder="Contoh: Dra. Siti Aminah" />
+                            <Input label="NIP" value={form.nip} onChange={e => setForm({...form, nip: e.target.value})} placeholder="Nomor Induk Pegawai" />
+                            <Select label="Mata Pelajaran Utama" value={form.subjectId} onChange={e => setForm({...form, subjectId: e.target.value})} options={SUBJECTS.map(s => ({ value: s.id, label: s.name }))} placeholder="Pilih Mapel..." />
+                            <Input label="Password" type="password" placeholder="Minimal 8 karakter" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+                            <Input label="Konfirmasi Password" type="password" placeholder="Ulangi password" value={form.confirm} onChange={e => setForm({...form, confirm: e.target.value})} />
+                            <Button type="submit" variant="secondary" className="w-full py-3 mt-4" disabled={loading}>{loading ? 'Mendaftar...' : 'Daftar Pengajar'}</Button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- DASHBOARDS ---
+        const DashboardSiswa = () => {
+            const { user, navigate } = useContext(AppStateContext);
+            
+            const menus = [
+                { id: 'tryout_tka', title: 'Try Out TKA', icon: 'fa-file-signature', color: 'bg-purple-600', desc: 'Simulasi Soal TKA Matematika & Bahasa' },
+                { id: 'subjects', title: 'Mata Pelajaran', icon: 'fa-book-open-reader', color: 'bg-blue-500', desc: 'Materi Pembelajaran Kelas Anda' },
+                { id: 'literacy', title: 'Literasi Sekolah', icon: 'fa-book', color: 'bg-teal-500', desc: 'Artikel & Buku Pemahaman Bacaan' },
+                { id: 'numeracy', title: 'Numerasi Praktis', icon: 'fa-calculator', color: 'bg-amber-500', desc: 'Latihan Berhitung & Logika Matrik' },
+                { id: 'achievements', title: 'Prestasi Saya', icon: 'fa-medal', color: 'bg-orange-500', desc: 'Pencapaian & Lencana Penghargaan' },
+                { id: 'profile', title: 'Profil Saya', icon: 'fa-user-circle', color: 'bg-indigo-500', desc: 'Pengaturan Identitas Akun' }
+            ];
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-20">
+                    <div className="bg-gradient-to-r from-primary to-blue-500 rounded-3xl p-6 sm:p-10 text-white shadow-xl mb-8 relative overflow-hidden">
+                        <div className="relative z-10">
+                            <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">Portal Belajar Digital</span>
+                            <h1 className="text-2xl sm:text-4xl font-black mb-2">Selamat datang, {user.fullName}!</h1>
+                            <p className="text-blue-100 text-sm sm:text-base"><i className="fas fa-chalkboard-user mr-2"></i>Kelas {user.classId} | No. Absen {user.absensi}</p>
+                        </div>
+                    </div>
+
+                    <h2 className="text-lg sm:text-xl font-bold text-gray-800 mb-4 px-2">Menu Pembelajaran Utama</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {menus.map((menu) => (
+                            <div key={menu.id} onClick={() => navigate(menu.id)} 
+                                 className="bg-white rounded-3xl p-6 shadow-sm hover:shadow-xl transition-all cursor-pointer border border-gray-100 group transform hover:-translate-y-1">
+                                <div className={`w-14 h-14 ${menu.color} text-white rounded-2xl flex items-center justify-center text-2xl mb-4 shadow-md group-hover:scale-110 transition-transform`}>
+                                    <i className={`fas ${menu.icon}`}></i>
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-800 mb-1">{menu.title}</h3>
+                                <p className="text-sm text-gray-500">{menu.desc}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const DashboardGuru = () => {
+            const { user, navigate, setViewParams } = useContext(AppStateContext);
+            const teacherSubject = SUBJECTS.find(s => s.id === user.subjectId) || { name: 'Mata Pelajaran General' };
+
+            return (
+                <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-20">
+                    <div className="bg-gradient-to-r from-teal-600 to-emerald-600 rounded-3xl p-6 sm:p-10 text-white shadow-xl mb-8">
+                        <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">Portal Pengajar</span>
+                        <h1 className="text-2xl sm:text-4xl font-black mb-2">Selamat bertugas, {user.fullName}</h1>
+                        <p className="text-teal-100 text-sm sm:text-base"><i className="fas fa-book-bookmark mr-2"></i>Pengampu {teacherSubject.name} | NIP: {user.nip}</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100">
+                            <div className="w-12 h-12 bg-primary/10 text-primary rounded-2xl flex items-center justify-center text-2xl mb-4">
+                                <i className="fas fa-file-circle-plus"></i>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">Tambah Materi & Tugas</h3>
+                            <p className="text-sm text-gray-500 mb-6">Unggah ringkasan materi, tautan video, atau MPI Interaktif ke database cloud.</p>
+                            <Button onClick={() => navigate('teacher_add_material')} className="w-full py-3"><i className="fas fa-plus"></i> Buat Materi Baru</Button>
+                        </div>
+
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100">
+                            <div className="w-12 h-12 bg-amber-500/10 text-amber-600 rounded-2xl flex items-center justify-center text-2xl mb-4">
+                                <i className="fas fa-folder-open"></i>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-800 mb-2">Kelola Modul Pembelajaran</h3>
+                            <p className="text-sm text-gray-500 mb-6">Lihat dan edit seluruh bank materi tersimpan untuk semua tingkatan kelas.</p>
+                            <Button variant="secondary" onClick={() => { setViewParams({ subject: teacherSubject }); navigate('subject_materials'); }} className="w-full py-3"><i className="fas fa-list"></i> Lihat Modul Saya</Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- SUBJECTS & MATERIALS ---
+        const SubjectsList = () => {
+            const { navigate, setViewParams } = useContext(AppStateContext);
+
+            return (
+                <div className="max-w-7xl mx-auto pb-20">
+                    <PageNav title="Daftar Mata Pelajaran" />
+                    <div className="px-4 sm:px-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {SUBJECTS.map(subj => (
+                                <div key={subj.id} onClick={() => { setViewParams({ subject: subj }); navigate('subject_materials'); }}
+                                     className="bg-white p-6 rounded-3xl shadow-sm hover:shadow-md transition-all cursor-pointer border border-gray-100 flex items-center gap-4 group">
+                                    <div className={`w-14 h-14 ${subj.color} text-white rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-md group-hover:scale-105 transition-transform`}>
+                                        <i className={`fas ${subj.icon}`}></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-gray-800 text-base leading-snug">{subj.name}</h3>
+                                        <span className="text-xs text-primary font-medium mt-1 inline-block">Buka Modul <i className="fas fa-chevron-right text-[10px] ml-1"></i></span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SubjectMaterials = () => {
+            const { viewParams, user } = useContext(AppStateContext);
+            const subject = viewParams?.subject || SUBJECTS[3]; // Fallback to Math
+            const [materials, setMaterials] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [selectedMaterial, setSelectedMaterial] = useState(null);
+
+            useEffect(() => {
+                const fetchMaterials = async () => {
+                    setLoading(true);
+                    const res = await dbService.getMaterials(subject.id, user?.classId);
+                    setMaterials(res);
+                    setLoading(false);
+                };
+                fetchMaterials();
+            }, [subject, user]);
+
+            return (
+                <div className="max-w-5xl mx-auto pb-20">
+                    <PageNav title={`Modul: ${subject.name}`} />
+                    <div className="px-4 sm:px-6 space-y-6">
+                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center gap-4">
+                            <div className={`w-14 h-14 ${subject.color} text-white rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow`}>
+                                <i className={`fas ${subject.icon}`}></i>
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-800">{subject.name}</h2>
+                                <p className="text-xs sm:text-sm text-gray-500">Materi ringkasan, media pembelajaran interaktif (MPI) & video</p>
+                            </div>
+                        </div>
+
+                        {loading ? (
+                            <div className="text-center py-12 text-gray-400"><i className="fas fa-spinner fa-spin text-2xl"></i> Memuat modul...</div>
+                        ) : materials.length === 0 ? (
+                            <div className="bg-white p-8 rounded-3xl text-center text-gray-500 border border-gray-100">
+                                <i className="fas fa-folder-open text-4xl mb-3 text-gray-300"></i>
+                                <p>Belum ada modul materi yang diunggah untuk kelas ini.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {materials.map(m => (
+                                    <div key={m.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:border-primary transition-all flex flex-col justify-between">
+                                        <div>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${
+                                                    m.type === 'mpi' ? 'bg-purple-100 text-purple-700' :
+                                                    m.type === 'video' ? 'bg-blue-50 text-primary' : 'bg-emerald-50 text-emerald-700'
+                                                }`}>
+                                                    {m.type === 'mpi' ? 'MPI Interaktif' : m.type === 'video' ? 'Video Tutorial' : 'Artikel Ringkasan'}
+                                                </span>
+                                                <span className="text-xs text-gray-400">Target: {m.classId}</span>
+                                            </div>
+                                            <h3 className="font-bold text-gray-800 text-lg mb-2">{m.title}</h3>
+                                            {m.description && <p className="text-xs text-gray-500 mb-3">{m.description}</p>}
+                                        </div>
+                                        <Button variant="outline" onClick={() => setSelectedMaterial(m)} className="mt-4 w-full py-2.5 text-sm">
+                                            <i className={`fas ${m.type === 'mpi' ? 'fa-cubes' : m.type === 'video' ? 'fa-play' : 'fa-book-open'}`}></i> 
+                                            {m.type === 'mpi' ? ' Buka Media Interaktif (MPI)' : ' Baca / Putar Modul'}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {selectedMaterial && (
+                        <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center p-4 animate-fade-in">
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 relative">
+                                <button onClick={() => setSelectedMaterial(null)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-700 text-xl z-10">
+                                    <i className="fas fa-times"></i>
+                                </button>
+                                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase mb-2 inline-block ${
+                                    selectedMaterial.type === 'mpi' ? 'bg-purple-100 text-purple-700' :
+                                    selectedMaterial.type === 'video' ? 'bg-primary/10 text-primary' : 'bg-emerald-100 text-emerald-800'
+                                }`}>
+                                    {selectedMaterial.type === 'mpi' ? 'Media Pembelajaran Interaktif (MPI)' : selectedMaterial.type}
+                                </span>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-4">{selectedMaterial.title}</h3>
+                                <div className="border-t pt-4 text-gray-700 space-y-4">
+                                    {selectedMaterial.type === 'video' ? (
+                                        <div className="space-y-4">
+                                            <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow">
+                                                <iframe src={selectedMaterial.content} title={selectedMaterial.title} className="w-full h-full border-0" allowFullScreen></iframe>
+                                            </div>
+                                            {selectedMaterial.description && (
+                                                <p className="text-sm bg-slate-50 p-4 rounded-xl text-gray-600 leading-relaxed border border-gray-100">
+                                                    {selectedMaterial.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : selectedMaterial.type === 'mpi' ? (
+                                        <div className="space-y-4">
+                                            {selectedMaterial.content.startsWith('http') ? (
+                                                <div className="w-full h-[500px] bg-slate-100 rounded-2xl overflow-hidden shadow border border-gray-200">
+                                                    <iframe src={selectedMaterial.content} title={selectedMaterial.title} className="w-full h-full border-0" allow="fullscreen"></iframe>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-700">
+                                                    <div className="flex items-center gap-2 text-purple-400 mb-3 font-semibold text-sm">
+                                                        <i className="fas fa-code"></i> Paket MPI / HTML Interaktif
+                                                    </div>
+                                                    <div className="bg-white text-gray-800 p-4 rounded-xl shadow-inner max-h-[450px] overflow-y-auto">
+                                                        <div dangerouslySetInnerHTML={{ __html: selectedMaterial.content }} />
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {selectedMaterial.description && (
+                                                <p className="text-sm bg-purple-50 p-4 rounded-xl text-purple-900 leading-relaxed border border-purple-100">
+                                                    <i className="fas fa-circle-info text-purple-600 mr-2"></i>
+                                                    {selectedMaterial.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl text-sm leading-relaxed">
+                                            <MathText text={selectedMaterial.content} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const TeacherAddMaterial = () => {
+            const { navigate, user, showToast } = useContext(AppStateContext);
+            const [form, setForm] = useState({ classId: 'Semua Kelas VIII', title: '', type: 'materi', content: '', description: '' });
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                try {
+                    await dbService.addMaterial({
+                        subjectId: user.subjectId || '8',
+                        classId: form.classId,
+                        title: form.title,
+                        type: form.type,
+                        content: form.content,
+                        description: form.description
+                    });
+                    showToast("Materi baru berhasil diunggah ke cloud database!", "success");
+                    navigate('dashboard_guru');
+                } catch (err) {
+                    showToast(err.message);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="max-w-3xl mx-auto pb-20">
+                    <PageNav title="Tambah Materi Baru" />
+                    <div className="px-4 sm:px-6">
+                        <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+                            <Select label="Target Kelas" value={form.classId} onChange={e => setForm({...form, classId: e.target.value})} options={TEACHER_CLASS_OPTIONS} />
+                            <Input label="Judul Materi / Topik" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Contoh: Media Interaktif Tata Surya" />
+                            <Select 
+                                label="Jenis Konten" 
+                                value={form.type} 
+                                onChange={e => setForm({...form, type: e.target.value})} 
+                                options={[
+                                    { value: 'materi', label: 'Teks / Ringkasan' }, 
+                                    { value: 'video', label: 'Tautan Video Embed YouTube' },
+                                    { value: 'mpi', label: 'MPI (Media Pembelajaran Interaktif)' }
+                                ]} 
+                            />
+                            <Input label="Deskripsi Singkat (Opsional)" required={false} value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Keterangan singkat petunjuk interaktif/video/materi..." />
+                            <div className="mb-4">
+                                <label className="block text-gray-700 text-sm font-bold mb-1.5">
+                                    {form.type === 'mpi' ? 'URL Web MPI / Embed Link / Kode HTML Interaktif' : 'Isi Ringkasan Materi / URL Video'} <span className="text-red-500">*</span>
+                                </label>
+                                <textarea 
+                                    rows="6" 
+                                    value={form.content} 
+                                    onChange={e => setForm({...form, content: e.target.value})} 
+                                    required
+                                    placeholder={
+                                        form.type === 'mpi' 
+                                        ? 'Masukkan URL link MPI (Genially/Canva/H5P/Moodle) atau pastekan kode embed HTML interaktif...' 
+                                        : form.type === 'video'
+                                        ? 'Masukkan URL video embed YouTube (contoh: https://www.youtube.com/embed/...)'
+                                        : 'Tuliskan materi di sini (mendukung LaTeX seperti $x^2 + y^2 = r^2$)...'
+                                    }
+                                    className="shadow-sm border border-gray-300 rounded-xl w-full py-3 px-4 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                                ></textarea>
+                            </div>
+                            <Button type="submit" variant="secondary" className="w-full py-3 font-bold" disabled={loading}>
+                                {loading ? 'Mengunggah ke Cloud...' : 'Unggah Materi Modul'}
+                            </Button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- LITERACY, NUMERACY, ACHIEVEMENTS & PROFILE ---
+        const LiteracyPage = () => {
+            const [selectedArticle, setSelectedArticle] = useState(null);
+
+            return (
+                <div className="max-w-5xl mx-auto pb-20">
+                    <PageNav title="Literasi Sekolah" />
+                    <div className="px-4 sm:px-6 space-y-6">
+                        <div className="bg-gradient-to-r from-teal-500 to-emerald-600 p-6 rounded-3xl text-white shadow-md">
+                            <h2 className="text-xl font-bold mb-2"><i className="fas fa-book-reader mr-2"></i>Pojok Baca & Literasi Smepsa</h2>
+                            <p className="text-sm opacity-90">Tingkatkan wawasan, kebiasaan membaca, dan kemampuan bernalar kritis melalui bacaan bermanfaat.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {INITIAL_ARTICLES.map(art => (
+                                <div key={art.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+                                            <span className="bg-teal-50 text-teal-700 font-bold px-2.5 py-1 rounded-full">{art.category}</span>
+                                            <span>{art.date}</span>
+                                        </div>
+                                        <h3 className="font-bold text-gray-800 text-lg mb-2">{art.title}</h3>
+                                        <p className="text-sm text-gray-600 line-clamp-3 mb-4">{art.summary}</p>
+                                    </div>
+                                    <Button variant="outline" onClick={() => setSelectedArticle(art)} className="w-full py-2 text-sm">
+                                        <i className="fas fa-book-open"></i> Baca Selengkapnya
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {selectedArticle && (
+                        <div className="fixed inset-0 bg-black/50 z-50 flex justify-center items-center p-4 animate-fade-in">
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6 sm:p-8 relative">
+                                <button onClick={() => setSelectedArticle(null)} className="absolute top-6 right-6 text-gray-400 hover:text-gray-700 text-xl">
+                                    <i className="fas fa-times"></i>
+                                </button>
+                                <span className="bg-teal-100 text-teal-800 text-xs font-bold px-3 py-1 rounded-full uppercase mb-2 inline-block">{selectedArticle.category}</span>
+                                <h3 className="text-2xl font-bold text-gray-800 mb-2">{selectedArticle.title}</h3>
+                                <p className="text-xs text-gray-400 mb-6">Penulis: {selectedArticle.author} | {selectedArticle.date}</p>
+                                <div className="border-t pt-4 text-gray-700 whitespace-pre-line leading-relaxed text-sm sm:text-base">
+                                    {selectedArticle.content}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const NumeracyPage = () => {
+            const [activeQuiz, setActiveQuiz] = useState(null);
+            const [userAnswers, setUserAnswers] = useState({});
+            const [submitted, setSubmitted] = useState(false);
+
+            const handleSelect = (qIdx, optIdx) => {
+                if (submitted) return;
+                setUserAnswers({ ...userAnswers, [qIdx]: optIdx });
+            };
+
+            const calculateScore = () => {
+                let correctCount = 0;
+                activeQuiz.questions.forEach((q, idx) => {
+                    if (userAnswers[idx] === q.correct) correctCount++;
+                });
+                return Math.round((correctCount / activeQuiz.questions.length) * 100);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto pb-20">
+                    <PageNav title="Numerasi Praktis" />
+                    <div className="px-4 sm:px-6 space-y-6">
+                        {!activeQuiz ? (
+                            <div className="space-y-6">
+                                <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-6 rounded-3xl text-white shadow-md">
+                                    <h2 className="text-xl font-bold mb-2"><i className="fas fa-calculator mr-2"></i>Latihan Numerasi & Penalaran Logis</h2>
+                                    <p className="text-sm opacity-90">Uji kemampuan pemecahan masalah dan perhitungan matematis dalam kehidupan nyata.</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {NUMERACY_QUIZZES.map(q => (
+                                        <div key={q.id} className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all flex flex-col justify-between">
+                                            <div>
+                                                <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center text-xl mb-3">
+                                                    <i className="fas fa-brain"></i>
+                                                </div>
+                                                <h3 className="font-bold text-gray-800 text-lg mb-2">{q.title}</h3>
+                                                <p className="text-sm text-gray-500 mb-4">{q.desc}</p>
+                                            </div>
+                                            <Button variant="accent" onClick={() => { setActiveQuiz(q); setUserAnswers({}); setSubmitted(false); }} className="w-full py-2.5 text-sm font-bold">
+                                                Mulai Quiz Numerasi <i className="fas fa-arrow-right ml-1"></i>
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 space-y-6">
+                                <div className="flex items-center justify-between border-b pb-4">
+                                    <h3 className="text-xl font-bold text-gray-800">{activeQuiz.title}</h3>
+                                    <Button variant="ghost" onClick={() => setActiveQuiz(null)} className="!py-1 !px-3 text-sm">
+                                        <i className="fas fa-xmark"></i> Tutup Quiz
+                                    </Button>
+                                </div>
+
+                                {activeQuiz.questions.map((q, idx) => (
+                                    <div key={idx} className="p-4 sm:p-6 bg-slate-50 rounded-2xl border border-gray-200/80 space-y-3">
+                                        <div className="font-semibold text-gray-800 text-sm sm:text-base">
+                                            <span className="text-primary font-bold mr-2">{idx + 1}.</span>
+                                            <MathText text={q.question} />
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
+                                            {q.options.map((opt, oIdx) => {
+                                                const isSelected = userAnswers[idx] === oIdx;
+                                                const isCorrect = q.correct === oIdx;
+                                                let btnClass = "border-gray-200 bg-white text-gray-700 hover:bg-gray-100";
+
+                                                if (submitted) {
+                                                    if (isCorrect) btnClass = "border-emerald-500 bg-emerald-50 text-emerald-800 font-bold";
+                                                    else if (isSelected && !isCorrect) btnClass = "border-red-500 bg-red-50 text-red-800 font-bold";
+                                                } else if (isSelected) {
+                                                    btnClass = "border-primary bg-blue-50 text-primary font-bold";
+                                                }
+
+                                                return (
+                                                    <button
+                                                        key={oIdx}
+                                                        onClick={() => handleSelect(idx, oIdx)}
+                                                        className={`p-3 text-left rounded-xl border text-sm transition-all flex items-start gap-2 ${btnClass}`}
+                                                    >
+                                                        <span className="font-bold min-w-[20px]">{String.fromCharCode(65 + oIdx)}.</span>
+                                                        <MathText text={opt} />
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {submitted && (
+                                            <div className="mt-3 p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-xs sm:text-sm text-blue-900 leading-relaxed">
+                                                <span className="font-bold block mb-1 text-primary"><i className="fas fa-lightbulb mr-1"></i>Pembahasan:</span>
+                                                <MathText text={q.explanation} />
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+
+                                {!submitted ? (
+                                    <Button onClick={() => setSubmitted(true)} disabled={Object.keys(userAnswers).length < activeQuiz.questions.length} className="w-full py-3 font-bold">
+                                        Kumpulkan Jawaban
+                                    </Button>
+                                ) : (
+                                    <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl text-center space-y-3">
+                                        <div className="text-3xl font-black text-emerald-700">Skor Anda: {calculateScore()} / 100</div>
+                                        <p className="text-sm text-emerald-800">Kerja bagus! Hasil pengerjaan ini langsung tercatat.</p>
+                                        <Button onClick={() => { setUserAnswers({}); setSubmitted(false); }} variant="outline" className="mx-auto text-sm">
+                                            Coba Lagi
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const AchievementsPage = () => {
+            const { user } = useContext(AppStateContext);
+
+            return (
+                <div className="max-w-4xl mx-auto pb-20">
+                    <PageNav title="Prestasi & Lencana Penghargaan" />
+                    <div className="px-4 sm:px-6 space-y-6">
+                        <div className="bg-gradient-to-r from-orange-500 to-amber-500 p-6 sm:p-8 rounded-3xl text-white shadow-md text-center">
+                            <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-4xl mx-auto mb-3 border-2 border-white/40">
+                                <i className="fas fa-trophy text-yellow-300"></i>
+                            </div>
+                            <h2 className="text-2xl font-bold">{user?.fullName}</h2>
+                            <p className="text-sm opacity-90">Siswa Aktif | Kelas {user?.classId}</p>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                            <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
+                                <i className="fas fa-award text-amber-500"></i> Lencana Penghargaan Diterima
+                            </h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                                {(user?.badges || ['Siswa Baru Smepsa', 'Pionir Literasi']).map((badge, idx) => (
+                                    <div key={idx} className="bg-amber-50/50 border border-amber-200 p-4 rounded-2xl text-center flex flex-col items-center">
+                                        <div className="w-12 h-12 bg-amber-400 text-white rounded-full flex items-center justify-center text-xl mb-2 shadow-sm">
+                                            <i className="fas fa-star"></i>
+                                        </div>
+                                        <span className="font-bold text-gray-800 text-sm">{badge}</span>
+                                        <span className="text-[10px] text-gray-400 mt-1">Terverifikasi Cloud</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ProfilePage = () => {
+            const { user, setLogoutModalOpen } = useContext(AppStateContext);
+
+            return (
+                <div className="max-w-3xl mx-auto pb-20">
+                    <PageNav title="Profil Akun" />
+                    <div className="px-4 sm:px-6">
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 text-center relative overflow-hidden">
+                            <div className="w-24 h-24 bg-primary/10 text-primary rounded-full flex items-center justify-center text-4xl mx-auto mb-4 border-4 border-primary/20">
+                                <i className="fas fa-user"></i>
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-800">{user?.fullName}</h2>
+                            <p className="text-sm text-gray-500 mb-6">{user?.role === 'siswa' ? `Siswa Kelas ${user?.classId}` : `Pengajar NIP: ${user?.nip}`}</p>
+
+                            <div className="bg-slate-50 p-4 rounded-2xl text-left space-y-3 mb-6 border border-gray-100 text-sm">
+                                <div className="flex justify-between border-b pb-2">
+                                    <span className="text-gray-500">Peran Akun:</span>
+                                    <span className="font-bold text-gray-800 uppercase">{user?.role}</span>
+                                </div>
+                                {user?.role === 'siswa' ? (
+                                    <>
+                                        <div className="flex justify-between border-b pb-2">
+                                            <span className="text-gray-500">Kelas:</span>
+                                            <span className="font-bold text-gray-800">{user?.classId}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-gray-500">Nomor Absensi:</span>
+                                            <span className="font-bold text-gray-800">{user?.absensi}</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex justify-between">
+                                        <span className="text-gray-500">NIP Pengajar:</span>
+                                        <span className="font-bold text-gray-800">{user?.nip}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <Button variant="danger" onClick={() => setLogoutModalOpen(true)} className="w-full py-3 font-bold">
+                                <i className="fas fa-right-from-bracket mr-2"></i> Keluar dari Akun
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- TRY OUT TKA EXAM COMPONENT ---
+        const TryOutTKA = () => {
+            const [selectedSubject, setSelectedSubject] = useState('matematika');
+            const [userAnswers, setUserAnswers] = useState({});
+            const [submitted, setSubmitted] = useState(false);
+
+            const questions = TRYOUT_TKA_DATA[selectedSubject] || [];
+
+            const handleSingleSelect = (qIdx, optionIdx) => {
+                if (submitted) return;
+                setUserAnswers({ ...userAnswers, [qIdx]: optionIdx });
+            };
+
+            const handleMultipleSelect = (qIdx, optionIdx) => {
+                if (submitted) return;
+                const current = userAnswers[qIdx] || [];
+                const updated = current.includes(optionIdx)
+                    ? current.filter(i => i !== optionIdx)
+                    : [...current, optionIdx];
+                setUserAnswers({ ...userAnswers, [qIdx]: updated });
+            };
+
+            const calculateScore = () => {
+                let correctCount = 0;
+                questions.forEach((q, idx) => {
+                    const ans = userAnswers[idx];
+                    if (q.type === 'single') {
+                        if (ans === q.correctIndex) correctCount++;
+                    } else if (q.type === 'multiple') {
+                        if (Array.isArray(ans) && 
+                            ans.length === q.correctIndices.length && 
+                            ans.every(val => q.correctIndices.includes(val))) {
+                            correctCount++;
+                        }
+                    }
+                });
+                return Math.round((correctCount / questions.length) * 100);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto pb-20">
+                    <PageNav title="Try Out TKA (Tes Kemampuan Akademik)" />
+                    <div className="px-4 sm:px-6 space-y-6">
+                        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 sm:p-8 rounded-3xl text-white shadow-lg flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div>
+                                <span className="bg-white/20 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider mb-2 inline-block">Simulasi Ujian TKA</span>
+                                <h2 className="text-2xl font-black">Latihan & Try Out TKA 2026</h2>
+                                <p className="text-purple-100 text-sm mt-1">Soal Pilihan Ganda dan Pilihan Ganda Kompleks sesuai standar TKA terbaru.</p>
+                            </div>
+                            <div className="flex bg-white/10 p-1.5 rounded-2xl gap-2 backdrop-blur shrink-0 w-full md:w-auto">
+                                <button
+                                    onClick={() => { setSelectedSubject('matematika'); setUserAnswers({}); setSubmitted(false); }}
+                                    className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                                        selectedSubject === 'matematika' ? 'bg-white text-purple-700 shadow-md' : 'text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    <i className="fas fa-calculator mr-2"></i> Matematika
+                                </button>
+                                <button
+                                    onClick={() => { setSelectedSubject('bahasa_indonesia'); setUserAnswers({}); setSubmitted(false); }}
+                                    className={`flex-1 md:flex-none px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                                        selectedSubject === 'bahasa_indonesia' ? 'bg-white text-purple-700 shadow-md' : 'text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    <i className="fas fa-book-open mr-2"></i> Bahasa Indonesia
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-sm border border-gray-100 space-y-6">
+                            <div className="flex items-center justify-between border-b pb-4">
+                                <h3 className="text-lg font-bold text-gray-800 uppercase tracking-wide">
+                                    Soal TKA {selectedSubject === 'matematika' ? 'Matematika' : 'Bahasa Indonesia'} ({questions.length} Soal)
+                                </h3>
+                                {submitted && (
+                                    <span className="text-sm font-black bg-purple-100 text-purple-800 px-4 py-1.5 rounded-full border border-purple-200">
+                                        Skor Akhir: {calculateScore()} / 100
+                                    </span>
+                                )}
+                            </div>
+
+                            {questions.map((q, idx) => (
+                                <div key={q.id || idx} className="p-5 sm:p-6 bg-slate-50 rounded-2xl border border-gray-200/80 space-y-4">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="font-semibold text-gray-800 text-sm sm:text-base leading-relaxed w-full">
+                                            <span className="text-purple-600 font-extrabold mr-2">{idx + 1}.</span>
+                                            <MathText text={q.question} />
+                                        </div>
+                                    </div>
+
+                                    <div className="text-xs font-semibold text-purple-600 bg-purple-50 inline-block px-3 py-1 rounded-md border border-purple-100">
+                                        {q.type === 'single' ? 'Pilihan Ganda (Pilih 1)' : 'Pilihan Ganda Kompleks (Pilih lebih dari satu)'}
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-2 pt-2">
+                                        {q.options.map((opt, oIdx) => {
+                                            const isSelected = q.type === 'single' 
+                                                ? userAnswers[idx] === oIdx 
+                                                : (userAnswers[idx] || []).includes(oIdx);
+
+                                            let isCorrect = false;
+                                            if (q.type === 'single') isCorrect = q.correctIndex === oIdx;
+                                            else isCorrect = q.correctIndices?.includes(oIdx);
+
+                                            let style = "border-gray-200 bg-white text-gray-700 hover:bg-gray-100";
+                                            if (submitted) {
+                                                if (isCorrect) style = "border-emerald-500 bg-emerald-50 text-emerald-900 font-bold";
+                                                else if (isSelected && !isCorrect) style = "border-red-500 bg-red-50 text-red-900 font-bold";
+                                            } else if (isSelected) {
+                                                style = "border-purple-600 bg-purple-50 text-purple-900 font-bold";
+                                            }
+
+                                            return (
+                                                <button
+                                                    key={oIdx}
+                                                    onClick={() => q.type === 'single' ? handleSingleSelect(idx, oIdx) : handleMultipleSelect(idx, oIdx)}
+                                                    className={`p-3.5 text-left rounded-xl border text-sm transition-all flex items-start gap-3 ${style}`}
+                                                >
+                                                    <span className={`w-5 h-5 rounded-md flex items-center justify-center text-xs shrink-0 mt-0.5 ${
+                                                        isSelected ? 'bg-purple-600 text-white' : 'border border-gray-400 text-gray-500'
+                                                    }`}>
+                                                        {q.type === 'single' ? String.fromCharCode(65 + oIdx) : (isSelected ? '✓' : '')}
+                                                    </span>
+                                                    <div className="flex-1">
+                                                        <MathText text={opt} />
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {submitted && (
+                                        <div className="mt-4 p-4 bg-purple-50/80 border border-purple-200 rounded-xl text-xs sm:text-sm text-purple-950 leading-relaxed">
+                                            <span className="font-bold block mb-1 text-purple-800"><i className="fas fa-lightbulb mr-1"></i>Pembahasan Soal:</span>
+                                            <MathText text={q.explanation} />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+
+                            {!submitted ? (
+                                <Button 
+                                    onClick={() => setSubmitted(true)} 
+                                    disabled={Object.keys(userAnswers).length === 0} 
+                                    className="w-full py-3.5 font-bold !bg-purple-600 hover:!bg-purple-700 text-white"
+                                >
+                                    Selesaikan Ujian TKA
+                                </Button>
+                            ) : (
+                                <div className="bg-purple-50 border border-purple-200 p-6 rounded-2xl text-center space-y-3">
+                                    <div className="text-3xl font-black text-purple-700">Skor Ujian: {calculateScore()} / 100</div>
+                                    <p className="text-sm text-purple-900">Pembahasan untuk semua nomor telah ditampilkan di atas.</p>
+                                    <Button onClick={() => { setUserAnswers({}); setSubmitted(false); }} variant="outline" className="mx-auto text-sm">
+                                        Ulangi Simulasi
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MAIN APP COMPONENT ---
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [currentScreen, setCurrentScreen] = useState('landing');
+            const [history, setHistory] = useState([]);
+            const [toast, setToast] = useState({ message: '', type: 'error' });
+            const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+            const [viewParams, setViewParams] = useState({});
+
+            const showToast = (message, type = 'error') => {
+                setToast({ message, type });
+                setTimeout(() => setToast({ message: '', type: 'error' }), 4000);
+            };
+
+            const navigate = (screen) => {
+                setHistory(prev => [...prev, currentScreen]);
+                setCurrentScreen(screen);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const goBack = () => {
+                if (history.length > 0) {
+                    const prev = history[history.length - 1];
+                    setHistory(prevHist => prevHist.slice(0, -1));
+                    setCurrentScreen(prev);
+                } else {
+                    navigate(user ? `dashboard_${user.role}` : 'landing');
+                }
+            };
+
+            const login = async (role, identifier, password) => {
+                const loggedUser = await dbService.loginUser(role, identifier, password);
+                setUser(loggedUser);
+                navigate(`dashboard_${role}`);
+            };
+
+            const logout = () => {
+                setUser(null);
+                setLogoutModalOpen(false);
+                setHistory([]);
+                setCurrentScreen('landing');
+                showToast("Anda telah keluar dari aplikasi.", "success");
+            };
+
+            return (
+                <AppStateContext.Provider value={{
+                    user, setUser, currentScreen, navigate, goBack, showToast, 
+                    login, logout, setLogoutModalOpen, viewParams, setViewParams
+                }}>
+                    <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
+                        <Header />
+                        <main className="flex-grow">
+                            {currentScreen === 'landing' && <LandingPage />}
+                            {currentScreen === 'login_siswa' && <LoginSiswa />}
+                            {currentScreen === 'login_guru' && <LoginGuru />}
+                            {currentScreen === 'register_siswa' && <RegisterSiswa />}
+                            {currentScreen === 'register_guru' && <RegisterGuru />}
+                            {currentScreen === 'dashboard_siswa' && <DashboardSiswa />}
+                            {currentScreen === 'dashboard_guru' && <DashboardGuru />}
+                            {currentScreen === 'subjects' && <SubjectsList />}
+                            {currentScreen === 'subject_materials' && <SubjectMaterials />}
+                            {currentScreen === 'teacher_add_material' && <TeacherAddMaterial />}
+                            {currentScreen === 'literacy' && <LiteracyPage />}
+                            {currentScreen === 'numeracy' && <NumeracyPage />}
+                            {currentScreen === 'achievements' && <AchievementsPage />}
+                            {currentScreen === 'profile' && <ProfilePage />}
+                            {currentScreen === 'tryout_tka' && <TryOutTKA />}
+                        </main>
+
+                        <ConfirmModal
+                            isOpen={logoutModalOpen}
+                            title="Konfirmasi Keluar"
+                            message="Apakah Anda yakin ingin keluar dari akun Rumah Digital Smart Smepsa?"
+                            onConfirm={logout}
+                            onCancel={() => setLogoutModalOpen(false)}
+                        />
+
+                        <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'error' })} />
+                    </div>
+                </AppStateContext.Provider>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
